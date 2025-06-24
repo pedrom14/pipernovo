@@ -18,21 +18,28 @@ def tts():
     output_filename = f"{uuid.uuid4()}.wav"
     output_path = os.path.join("/tmp", output_filename)
 
-    # Caminhos e parâmetros
-    
+    # Voz selecionada
     voice = data.get("voice", "pt_BR-faber-medium")
     model_path = f"models/ptBR/{voice}.onnx"
     config_path = f"models/ptBR/{voice}.onnx.json"
     piper_bin = "./piper"
 
+    # Parâmetros de entonação e velocidade (com valores padrão)
+    length_scale = str(data.get("length_scale", "1.0"))
+    noise_scale = str(data.get("noise_scale", "0.33"))
+    noise_w = str(data.get("noise_w", "0.5"))
+
+    # Monta comando
     command = [
         piper_bin,
         "--model", model_path,
         "--config", config_path,
-        "--output_file", output_path
+        "--output_file", output_path,
+        "--length_scale", length_scale,
+        "--noise_scale", noise_scale,
+        "--noise_w", noise_w
     ]
 
-    # Chamada do Piper com entrada via stdin
     try:
         subprocess.run(command, input=text.encode("utf-8"), check=True)
         return send_file(output_path, mimetype="audio/wav")
@@ -43,4 +50,5 @@ def tts():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
