@@ -19,8 +19,10 @@ def tts():
     output_path = os.path.join("/tmp", output_filename)
 
     # Caminhos e parâmetros
-    model_path =  "models/ptBR/pt_BR-jeff-medium.onnx"
-    config_path = "models/ptBR/pt_BR-jeff-medium.onnx.json"
+    
+    voice = data.get("voice", "pt_BR-faber-medium")
+    model_path = f"models/ptBR/{voice}.onnx"
+    config_path = f"models/ptBR/{voice}.onnx.json"
     piper_bin = "./piper"
 
     command = [
