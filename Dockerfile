@@ -21,5 +21,8 @@ COPY . .
 
 RUN chmod +x /app/piper
 
+# 🔥 Adiciona o caminho das bibliotecas para o executável encontrar
+ENV LD_LIBRARY_PATH=/app
+
 CMD ["python", "app.py"]
 
