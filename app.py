@@ -1,63 +1,70 @@
-import os
-import subprocess
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file
 from flask_cors import CORS
+import subprocess
+import uuid
+import os
 import requests
 
 app = Flask(__name__)
 CORS(app)
 
-ONNX_URL = "https://pub-ce3bb4b09b4347da9e4835d744965af1.r2.dev/pt_BR-edresson-low.onnx"
-JSON_URL = "https://pub-ce3bb4b09b4347da9e4835d744965af1.r2.dev/pt_BR-edresson-low.onnx.json"
+# Função para baixar modelo e config se não existirem
+def download_if_needed(model_path, config_path):
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
-MODEL_DIR = "models/ptBR"
-MODEL_PATH = os.path.join(MODEL_DIR, "pt_BR-edresson-low.onnx")
-CONFIG_PATH = os.path.join(MODEL_DIR, "pt_BR-edresson-low.onnx.json")
-
-
-# Faz download dos arquivos se não existirem localmente
-def download_models():
-    os.makedirs(MODEL_DIR, exist_ok=True)
-
-    if not os.path.exists(MODEL_PATH):
-        print("Baixando modelo ONNX...")
-        r = requests.get(ONNX_URL)
-        with open(MODEL_PATH, 'wb') as f:
+    if not os.path.exists(model_path):
+        print("📥 Baixando modelo .onnx...")
+        model_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR-edresson-low.onnx"
+        r = requests.get(model_url)
+        with open(model_path, 'wb') as f:
             f.write(r.content)
 
-    if not os.path.exists(CONFIG_PATH):
-        print("Baixando config JSON...")
-        r = requests.get(JSON_URL)
-        with open(CONFIG_PATH, 'wb') as f:
+    if not os.path.exists(config_path):
+        print("📥 Baixando config .json...")
+        config_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR-edresson-low.onnx.json"
+        r = requests.get(config_url)
+        with open(config_path, 'wb') as f:
             f.write(r.content)
 
 @app.route('/tts', methods=['POST'])
 def tts():
-    data = request.get_json()
+    data = request.json
+    text = data.get('text')
+    voice = data.get('voice', 'pt_BR-edresson-low')
 
-    if not data or 'text' not in data:
-        return jsonify({'error': 'Parâmetro "text" obrigatório'}), 400
+    model_path = f"models/ptBR/{voice}.onnx"
+    config_path = f"models/ptBR/{voice}.onnx.json"
+    output_path = f"/tmp/{uuid.uuid4()}.wav"
 
-    text = data['text']
-
-    download_models()
-
-    output_path = 'output.wav'
-
-    command = [
-        './piper',
-        '--model', MODEL_PATH,
-        '--config', CONFIG_PATH,
-        '--output_file', output_path,
-        '--text', text
-    ]
-
+    # Garantir que modelo e config existem
     try:
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError as e:
-        return jsonify({'error': 'Erro ao gerar áudio', 'details': str(e)}), 500
+        download_if_needed(model_path, config_path)
+    except Exception as e:
+        return {"error": f"Erro ao baixar modelo: {str(e)}"}, 500
 
-    return send_file(output_path, mimetype='audio/wav')
+    # Executar o Piper
+    try:
+        result = subprocess.run([
+            "./piper",
+            "--model", model_path,
+            "--config", config_path,
+            "--output_file", output_path,
+            "--text", text
+        ], capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print("Erro no Piper:", result.stderr)
+            return {"error": result.stderr}, 500
+
+        return send_file(output_path, mimetype="audio/wav")
+
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+    finally:
+        if os.path.exists(output_path):
+            os.remove(output_path)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
