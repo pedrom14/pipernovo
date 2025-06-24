@@ -8,23 +8,30 @@ import requests
 app = Flask(__name__)
 CORS(app)
 
-# Função para baixar modelo e config se não existirem
+def safe_download(url, path):
+    print(f"🔽 Baixando: {url}")
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        with open(path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+    print(f"✅ Baixado: {path} ({os.path.getsize(path)} bytes)")
+
 def download_if_needed(model_path, config_path):
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
     if not os.path.exists(model_path):
-        print("📥 Baixando modelo .onnx...")
-        model_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR-edresson-low.onnx"
-        r = requests.get(model_url)
-        with open(model_path, 'wb') as f:
-            f.write(r.content)
+        safe_download(
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR-edresson-low.onnx",
+            model_path
+        )
 
     if not os.path.exists(config_path):
-        print("📥 Baixando config .json...")
-        config_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR-edresson-low.onnx.json"
-        r = requests.get(config_url)
-        with open(config_path, 'wb') as f:
-            f.write(r.content)
+        safe_download(
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR-edresson-low.onnx.json",
+            config_path
+        )
 
 @app.route('/tts', methods=['POST'])
 def tts():
@@ -36,14 +43,11 @@ def tts():
     config_path = f"models/ptBR/{voice}.onnx.json"
     output_path = f"/tmp/{uuid.uuid4()}.wav"
 
-    # Garantir que modelo e config existem
     try:
         download_if_needed(model_path, config_path)
-    except Exception as e:
-        return {"error": f"Erro ao baixar modelo: {str(e)}"}, 500
 
-    # Executar o Piper
-    try:
+        print("🎤 Gerando áudio com Piper...")
+
         result = subprocess.run([
             "./piper",
             "--model", model_path,
@@ -52,9 +56,14 @@ def tts():
             "--text", text
         ], capture_output=True, text=True)
 
+        print("📋 STDOUT:", result.stdout)
+        print("❗ STDERR:", result.stderr)
+
         if result.returncode != 0:
-            print("Erro no Piper:", result.stderr)
             return {"error": result.stderr}, 500
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+            return {"error": "Arquivo de áudio não gerado ou vazio."}, 500
 
         return send_file(output_path, mimetype="audio/wav")
 
