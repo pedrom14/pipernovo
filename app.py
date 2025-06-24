@@ -1,45 +1,44 @@
-@app.route('/tts', methods=['POST'])
+import os
+import subprocess
+import uuid
+from flask import Flask, request, send_file, jsonify
+from flask_cors import CORS
+
+app = Flask(__name__)
+CORS(app)
+
+@app.route("/tts", methods=["POST"])
 def tts():
+    data = request.get_json()
+    text = data.get("text", "")
+
+    if not text:
+        return jsonify({"error": "Campo 'text' é obrigatório."}), 400
+
+    output_filename = f"{uuid.uuid4()}.wav"
+    output_path = os.path.join("/tmp", output_filename)
+
+    # Caminhos e parâmetros
+    model_path = "models/ptBR/pt_BR-edresson-low.onnx"
+    config_path = "models/ptBR/pt_BR-edresson-low.onnx.json"
+    piper_bin = "./piper"
+
+    command = [
+        piper_bin,
+        "--model", model_path,
+        "--config", config_path,
+        "--output_file", output_path
+    ]
+
+    # Chamada do Piper com entrada via stdin
     try:
-        data = request.json
-        text = data.get('text')
-        voice = data.get('voice', 'pt_BR-edresson-low')
-
-        model_path = f"models/ptBR/{voice}.onnx"
-        config_path = f"models/ptBR/{voice}.onnx.json"
-        output_path = f"/tmp/{uuid.uuid4()}.wav"
-
-        download_if_needed(model_path, config_path)
-
-        result = subprocess.run([
-            "./piper",
-            "--model", model_path,
-            "--config", config_path,
-            "--output_file", output_path,
-            "--text", text
-        ], capture_output=True, text=True)
-
-        # NOVO: mostrar o erro diretamente se houver falha
-        if result.returncode != 0:
-            return {
-                "error": "Erro na execução do Piper",
-                "stdout": result.stdout,
-                "stderr": result.stderr
-            }, 500
-
-        if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
-            return {
-                "error": "Arquivo de áudio não foi gerado.",
-                "output_path": output_path
-            }, 500
-
+        subprocess.run(command, input=text.encode("utf-8"), check=True)
         return send_file(output_path, mimetype="audio/wav")
-
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": f"Erro ao executar o Piper: {e}"}), 500
     except Exception as e:
-        # NOVO: capturar qualquer exceção de Python (requests, etc.)
-        return {"error": str(e)}, 500
+        return jsonify({"error": str(e)}), 500
 
-    finally:
-        if os.path.exists(output_path):
-            os.remove(output_path)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
 
