@@ -28,9 +28,10 @@ def tts():
     piper_bin = "./piper"
 
     # Parâmetros de qualidade ajustados
-    length_scale = "1.6"     # Bem mais lento (sem exagerar)
-    noise_scale = "0.3"      # Entonação mais suave e estável
-    noise_w = "0.7"          # Timbre mais natural e orgânico
+    length_scale = "1.45"     # Lento, mas ainda fluido
+    noise_scale = "0.35"      # Suave, com variação suficiente
+    noise_w = "0.65"          # Timbre equilibrado, nem metálico nem abafado
+
 
     
     command = [
