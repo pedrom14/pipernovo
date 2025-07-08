@@ -51,17 +51,26 @@ def tts():
     ]
 
     try:
+        # Gera WAV com o Piper
         subprocess.run(command, input=text.encode("utf-8"), check=True)
 
+        # Converte para MP3 com cabeçalho otimizado para Web
         subprocess.run([
             "ffmpeg", "-y",
             "-i", wav_path,
             "-codec:a", "libmp3lame",
             "-b:a", "96k",
+            "-movflags", "+faststart",
             mp3_path
         ], check=True)
 
-        return send_file(mp3_path, mimetype="audio/mpeg")
+        # Retorna o áudio como arquivo com headers corretos
+        return send_file(
+            mp3_path,
+            mimetype="audio/mpeg",
+            as_attachment=True,
+            download_name=os.path.basename(mp3_path)
+        )
 
     except subprocess.CalledProcessError as e:
         return jsonify({"error": f"Erro ao executar o Piper ou ffmpeg: {e}"}), 500
