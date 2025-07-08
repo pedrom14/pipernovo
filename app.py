@@ -54,10 +54,11 @@ def tts():
         # Gera WAV com o Piper
         subprocess.run(command, input=text.encode("utf-8"), check=True)
 
-        # Converte para MP3 com cabeçalho otimizado para Web
+        # Converte para MP3 com cabeçalho otimizado para Web + filtro neutro
         subprocess.run([
             "ffmpeg", "-y",
             "-i", wav_path,
+            "-af", "volume=1.0",  # Força reprocessamento completo do áudio
             "-codec:a", "libmp3lame",
             "-b:a", "96k",
             "-movflags", "+faststart",
@@ -79,6 +80,7 @@ def tts():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
