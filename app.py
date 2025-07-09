@@ -3,27 +3,17 @@ import subprocess
 import uuid
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
-from bs4 import BeautifulSoup
-import html
 
 app = Flask(__name__)
 CORS(app)
 
-def limpar_html_para_tts(conteudo_html):
-    soup = BeautifulSoup(conteudo_html, "html.parser")
-    texto_puro = soup.get_text(separator='\n', strip=True)
-    texto_sem_entidades = html.unescape(texto_puro)
-    return texto_sem_entidades
-
 @app.route("/tts", methods=["POST"])
 def tts():
     data = request.get_json()
-    html_input = data.get("text", "")
+    text = data.get("text", "")
 
-    if not html_input:
+    if not text:
         return jsonify({"error": "Campo 'text' é obrigatório."}), 400
-
-    text = limpar_html_para_tts(html_input)
 
     wav_filename = f"{uuid.uuid4()}.wav"
     mp3_filename = wav_filename.replace(".wav", ".mp3")
@@ -31,15 +21,19 @@ def tts():
     wav_path = os.path.join("/tmp", wav_filename)
     mp3_path = os.path.join("/tmp", mp3_filename)
 
+    # Voz selecionada (padrão = faber)
     voice = data.get("voice", "pt_BR-faber-medium")
     model_path = f"models/ptBR/{voice}.onnx"
     config_path = f"models/ptBR/{voice}.onnx.json"
     piper_bin = "./piper"
 
-    length_scale = "1.45"
-    noise_scale = "0.35"
-    noise_w = "0.65"
+    # Parâmetros de qualidade ajustados
+    length_scale = "1.45"     # Lento, mas ainda fluido
+    noise_scale = "0.35"      # Suave, com variação suficiente
+    noise_w = "0.65"          # Timbre equilibrado, nem metálico nem abafado
 
+
+    
     command = [
         piper_bin,
         "--model", model_path,
@@ -51,27 +45,19 @@ def tts():
     ]
 
     try:
-        # Gera WAV com o Piper
+        # Gera o WAV com o Piper
         subprocess.run(command, input=text.encode("utf-8"), check=True)
 
-        # Converte para MP3 com cabeçalho otimizado para Web + filtro neutro
+        # Converte WAV para MP3 usando ffmpeg
         subprocess.run([
-            "ffmpeg", "-y",
+            "ffmpeg", "-y",  # sobrescreve se existir
             "-i", wav_path,
-            "-af", "volume=1.0",  # Força reprocessamento completo do áudio
             "-codec:a", "libmp3lame",
-            "-b:a", "96k",
-            "-movflags", "+faststart",
+            "-b:a", "96k",  # taxa de bits: bom equilíbrio qualidade/tamanho
             mp3_path
         ], check=True)
 
-        # Retorna o áudio como arquivo com headers corretos
-        return send_file(
-            mp3_path,
-            mimetype="audio/mpeg",
-            as_attachment=True,
-            download_name=os.path.basename(mp3_path)
-        )
+        return send_file(mp3_path, mimetype="audio/mpeg")
 
     except subprocess.CalledProcessError as e:
         return jsonify({"error": f"Erro ao executar o Piper ou ffmpeg: {e}"}), 500
@@ -80,7 +66,6 @@ def tts():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
 
 
 
