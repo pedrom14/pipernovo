@@ -1,6 +1,7 @@
 import os
 import subprocess
 import uuid
+import re
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 from bs4 import BeautifulSoup
@@ -9,10 +10,37 @@ import html
 app = Flask(__name__)
 CORS(app)
 
-def limpar_html_para_tts(conteudo_html):
-    soup = BeautifulSoup(conteudo_html, "html.parser")
-    texto_puro = soup.get_text(separator='\n', strip=True)
-    texto_sem_entidades = html.unescape(texto_puro)
+def preprocess_text_for_tts(conteudo_html):
+    soup = BeautifulSoup(conteudo_html, 'html.parser')
+
+    # Adiciona ponto em títulos
+    for header in soup.find_all(['h1', 'h2', 'h3']):
+        header.string = f"{header.get_text(strip=True)}."
+
+    # Extrai o texto com \n entre parágrafos
+    texto_bruto = soup.get_text(separator='\n')
+
+    linhas = texto_bruto.split('\n')
+    linhas_processadas = []
+
+    for linha in linhas:
+        texto = linha.strip()
+        if not texto:
+            continue
+
+        # Se já termina com pontuação, mantém
+        if re.search(r'[.!?:…]$', texto):
+            linhas_processadas.append(texto)
+        # Se termina com vírgula, dois pontos ou hífen, não adiciona ponto
+        elif re.search(r'[,:;\-–—]$', texto):
+            linhas_processadas.append(texto)
+        else:
+            # Adiciona ponto final para simular pausa
+            linhas_processadas.append(texto + '.')
+
+    # Junta com quebras duplas para simular parágrafos
+    texto_final = '\n\n'.join(linhas_processadas)
+    texto_sem_entidades = html.unescape(texto_final)
     return texto_sem_entidades
 
 @app.route("/tts", methods=["POST"])
@@ -23,7 +51,7 @@ def tts():
     if not html_input:
         return jsonify({"error": "Campo 'text' é obrigatório."}), 400
 
-    text = limpar_html_para_tts(html_input)
+    text = preprocess_text_for_tts(html_input)
 
     wav_filename = f"{uuid.uuid4()}.wav"
     mp3_filename = wav_filename.replace(".wav", ".mp3")
@@ -36,9 +64,9 @@ def tts():
     config_path = f"models/ptBR/{voice}.onnx.json"
     piper_bin = "./piper"
 
-    length_scale = "1.45"
-    noise_scale = "0.35"
-    noise_w = "0.65"
+    length_scale = "1.35"
+    noise_scale = "0.3"
+    noise_w = "0.6"
 
     command = [
         piper_bin,
@@ -70,6 +98,7 @@ def tts():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
